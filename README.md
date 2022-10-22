@@ -5,7 +5,7 @@ TO DO:
 > - [x] learning plot
 > - [x] varience plot
 - [x] REINFORCE with baseline
-> - [ ] REINFORCE vs REINFORCE with baseline plot
+> - [x] REINFORCE vs REINFORCE with baseline plot
 - [ ] Actor-Critic
 > - [ ] Explain the algorithm
 > - [ ] Explain the actor and critic network architecture
