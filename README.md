@@ -3,7 +3,7 @@
 TO DO:
 - [x] REINFORCE : mc
 > - [x] learning plot
-> - [ ] varience plot
+> - [x] varience plot
 - [x] REINFORCE with baseline
 > - [ ] REINFORCE vs REINFORCE with baseline plot
 - [ ] Actor-Critic

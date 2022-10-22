@@ -125,8 +125,6 @@ def reinforce(env, policy_model, seed, learning_rate,
         policy_loss.backward()
         optimizer.step()
 
-        if episode % 50 == 0 and verbose:
-          print('Episode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_deque)))
 
     return policy, scores
 
@@ -143,7 +141,7 @@ def compute_returns_naive_baseline(rewards, gamma):
         and normalise the rewards by dividing by the standard deviation
     '''
 
-    returns = 0
+    returns = []
     r = 0
     for i in reversed(range(len(rewards))):
         r = gamma * r + rewards[i]
@@ -170,14 +168,20 @@ def reinforce_naive_baseline(env, policy_model, seed, learning_rate,
     optimizer = optim.Adam(policy_model.parameters(), lr=learning_rate)
     scores_deque = deque(maxlen=100)
 
-    for episode in range(number_episodes):
+    for episode in range(1,number_episodes+1):
         state = env.reset()
         rewards = []
         log_probs = []
 
-        for step in range(max_episode_length):
-            
-            action,log_prob = policy.act(state)
+        for step in range(1,max_episode_length+1):
+            state = torch.from_numpy(state).float().to(device)
+            # distribution over possible actions for state
+            action_distribution = policy(state)
+            # sample action fron distributio
+            action = action_distribution.sample()
+            # compute log probability
+            log_prob = action_distribution.log_prob(action).unsqueeze(0)
+            # take a step in the env
             state, reward, done, _ = env.step(action.item())
             rewards.append(reward)
             log_probs.append(log_prob)
@@ -185,17 +189,22 @@ def reinforce_naive_baseline(env, policy_model, seed, learning_rate,
             if done:
                 break
 
-    scores.append(sum(rewards))
-    scores_deque.append(sum(rewards))
-    returns = compute_returns_naive_baseline(rewards, gamma)
-    log_probs = torch.cat(log_probs)
-    policy_loss = -torch.sum(log_probs * returns)
-    optimizer.zero_grad()
-    policy_loss.backward()
-    optimizer.step()
-    
-    if episode % 50 == 0 and verbose:
-      print('Episode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_deque)))
+        total_rewards = sum(rewards)
+        scores.append(total_rewards)
+        scores_deque.append(total_rewards)
+
+        # discounted return of the trajectory
+        returns = compute_returns_naive_baseline(rewards, gamma)
+        returns = torch.from_numpy(returns).float().to(device)
+        log_probs = torch.cat(log_probs)
+
+        # sum of the product log probalities and returns (need to multiply by -1 cos we are maximizing the expected discounted return )
+        policy_loss = -1 * torch.sum(log_probs * returns)
+
+        # update the policy parameters θ
+        optimizer.zero_grad()
+        policy_loss.backward()
+        optimizer.step()
 
     return policy, scores
 
@@ -286,4 +295,4 @@ def run_reinforce_with_naive_baseline(mean, std):
 if __name__ == '__main__':
     run_reinforce()
     mean, std = investigate_variance_in_reinforce()
-    # run_reinforce_with_naive_baseline(mean, std)
+    run_reinforce_with_naive_baseline(mean, std)
