@@ -9,10 +9,11 @@ import torch.nn as nn
 import random
 from collections import deque
 import torch.optim as optim
+import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
+# adapted from : https://github.com/KaleabTessera/Policy-Gradient/blob/master/reinforce/reinforce.py
 class SimplePolicy(nn.Module):
     '''
         approximate policy using a simple Neural Network
@@ -29,8 +30,8 @@ class SimplePolicy(nn.Module):
         # outputlayer 
         self.output = nn.Linear(h_size, a_size)
         # relu activation and softmax output
-        self.relu = nn.ReLU()
-        self.softmax = nn.Softmax(dim=1)
+        self.relu = F.relu
+        self.softmax = F.softmax
 
 
     def forward(self, x):
@@ -39,6 +40,7 @@ class SimplePolicy(nn.Module):
         x = self.relu(x)
         x = self.output(x)
         x = self.softmax(x)
+        x = torch.distributions.Categorical(x)
 
         return x
 
@@ -73,6 +75,7 @@ def reinforce(env, policy_model, seed, learning_rate,
               max_episode_length,
               gamma, verbose=True):
     # set random seeds (for reproducibility)
+    
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
@@ -85,14 +88,20 @@ def reinforce(env, policy_model, seed, learning_rate,
     optimizer = optim.Adam(policy_model.parameters(), lr=learning_rate)
     scores_deque = deque(maxlen=100)
 
-    for episode in range(len(number_episodes)):
+    for episode in range(1,number_episodes+1):
         state = env.reset()
         rewards = []
         log_probs = []
 
-        for step in range(max_episode_length):
-            
-            action,log_prob = policy.act(state)
+        for step in range(1,max_episode_length+1):
+            state = torch.from_numpy(state).float().to(device)
+            # distribution over possible actions for state
+            action_distribution = policy(state)
+            # sample action fron distributio
+            action = action_distribution.sample()
+            # compute log probability
+            log_prob = action_distribution.log_prob(action).unsqueeze(0)
+            # take a step in the env
             state, reward, done, _ = env.step(action.item())
             rewards.append(reward)
             log_probs.append(log_prob)
@@ -100,15 +109,24 @@ def reinforce(env, policy_model, seed, learning_rate,
             if done:
                 break
 
-    scores.append(sum(rewards))
-    scores_deque.append(sum(rewards))
-    returns = compute_returns(rewards, gamma)
-    log_probs = torch.cat(log_probs)
-    policy_loss = -torch.sum(log_probs * returns)
-    optimizer.zero_grad()
-    policy_loss.backward()
-    optimizer.step()
+        total_rewards = sum(rewards)
+        scores.append(total_rewards)
+        scores_deque.append(total_rewards)
 
+        # discounted return of the trajectory
+        returns = compute_returns(rewards, gamma)
+        log_probs = torch.cat(log_probs)
+
+        # sum of the product log probalities and returns (need to multiply by -1 cos we are maximizing the expected discounted return )
+        policy_loss = -1 * torch.sum(log_probs * returns)
+
+        # update the policy parameters θ
+        optimizer.zero_grad()
+        policy_loss.backward()
+        optimizer.step()
+
+        if episode % 50 == 0 and verbose:
+          print('Episode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_deque)))
 
     return policy, scores
 
@@ -152,7 +170,7 @@ def reinforce_naive_baseline(env, policy_model, seed, learning_rate,
     optimizer = optim.Adam(policy_model.parameters(), lr=learning_rate)
     scores_deque = deque(maxlen=100)
 
-    for episode in range(len(number_episodes)):
+    for episode in range(number_episodes):
         state = env.reset()
         rewards = []
         log_probs = []
@@ -169,15 +187,18 @@ def reinforce_naive_baseline(env, policy_model, seed, learning_rate,
 
     scores.append(sum(rewards))
     scores_deque.append(sum(rewards))
-    returns = compute_returns(rewards, gamma)
+    returns = compute_returns_naive_baseline(rewards, gamma)
     log_probs = torch.cat(log_probs)
     policy_loss = -torch.sum(log_probs * returns)
     optimizer.zero_grad()
     policy_loss.backward()
     optimizer.step()
+    
+    if episode % 50 == 0 and verbose:
+      print('Episode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_deque)))
 
     return policy, scores
-    return policy, scores
+
 
 def run_reinforce():
     env = gym.make('CartPole-v1')
@@ -187,27 +208,82 @@ def run_reinforce():
                                max_episode_length=1000,
                                gamma=1.0,
                                verbose=True)
-    # Plot learning   curve
+ 
+    # Plot learning curve
+    moving_avg = moving_average(scores, 50)
+    plt.plot( scores, label='Score')
+    plt.plot(
+        moving_avg, label=f'Moving Average (w={50})', linestyle='--')
+    plt.ylabel('Score')
+    plt.xlabel('Episode #')
+    plt.title('REINFORCE learning curve - CartPole-v1')
+    plt.legend()
+    plt.savefig('reinforce_learning_curve.png')
+    plt.show()
+
 
 
 def investigate_variance_in_reinforce():
     env = gym.make('CartPole-v1')
     seeds = np.random.randint(1000, size=5)
+    policy_model = SimplePolicy(s_size=env.observation_space.shape[0], h_size=50, a_size=env.action_space.n)
 
-    raise NotImplementedError
+    all_scores = []
+    for seed in seeds:
+        _, scores = reinforce(env=env, policy_model=policy_model, seed=int(seed), learning_rate=1e-2,
+                             number_episodes=1500,
+                             max_episode_length=1000,
+                             gamma=1.0,
+                             verbose=False)
+        all_scores.append(scores)
+        print(f"Reinforce training with seed:  {seed}  completed.")
+
+    moving_avg_over_runs = np.array(
+        [moving_average(score, 50) for score in all_scores])
+    mean = moving_avg_over_runs.mean(axis=0)
+    std = moving_avg_over_runs.std(axis=0)
+
+    # plot varience curve
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    x = np.arange(1, len(mean)+1)
+    ax.plot(x, mean, '-', color='blue')
+    ax.fill_between(x, mean - std, mean + std, color='blue', alpha=0.2)
+    plt.ylabel('Score')
+    plt.xlabel('Episode #')
+    plt.title('REINFORCE averaged over 5 seeds')
+    plt.savefig('reinforce_averaged_over_5_seeds.png')
+    plt.show()
 
     return mean, std
-  
+
 
 def run_reinforce_with_naive_baseline(mean, std):
     env = gym.make('CartPole-v1')
 
     np.random.seed(53)
     seeds = np.random.randint(1000, size=5)
-    raise NotImplementedError
+    policy_model = SimplePolicy(s_size=env.observation_space.shape[0], h_size=50, a_size=env.action_space.n)
+    policy, scores = reinforce_naive_baseline(env=env, policy_model=policy_model, seed=42, learning_rate=1e-2,
+                               number_episodes=1500,
+                               max_episode_length=1000,
+                               gamma=1.0,
+                               verbose=True)
+    
+    # Plot learning curve
+    moving_avg = moving_average(scores, 50)
+    plt.plot(scores, label='Score')
+    plt.plot(
+        moving_avg, label=f'Moving Average (w={50})', linestyle='--')
+    plt.ylabel('Score')
+    plt.xlabel('Episode #')
+    plt.title('REINFORCE with baseline learning curve - CartPole-v1')
+    plt.legend()
+    plt.savefig('reinforce_with_baseline_learning_curve.png')
+    plt.show()
 
 
 if __name__ == '__main__':
     run_reinforce()
     mean, std = investigate_variance_in_reinforce()
-    run_reinforce_with_naive_baseline(mean, std)
+    # run_reinforce_with_naive_baseline(mean, std)
