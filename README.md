@@ -9,7 +9,7 @@ TO DO:
 - [x] Actor-Critic
 > - [x] Explain the algorithm
 > - [x] Explain the actor and critic network architecture
-> - [ ] Create a GIF of your agent controlling the LunarLander
+> - [x] Create a GIF of your agent controlling the LunarLander
 
 <u> NOTE: </u> to run on windows using x-server you need to make sure the following are selected
 > -  start multiple programs
