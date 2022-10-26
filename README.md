@@ -18,4 +18,6 @@ TO DO:
 > -  Native opengl is **unselected**
 
 
-[Colab link](https://colab.research.google.com/drive/1qB-_D2cfP46q8dn8gb_OmjD4rt5CQuZE?usp=sharing)
+[Reinforce link](https://colab.research.google.com/drive/1qB-_D2cfP46q8dn8gb_OmjD4rt5CQuZE?usp=sharing)
+
+[Actor Critic link](https://colab.research.google.com/drive/19Ir2nvLY_iQ0Q7rdvSkG4u4pQBZKlGGg?usp=sharing)
