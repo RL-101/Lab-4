@@ -13,7 +13,7 @@ import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# adapted from : https://github.com/KaleabTessera/Policy-Gradient/blob/master/reinforce/reinforce.py
+# some parts adapted from : https://github.com/KaleabTessera/Policy-Gradient/blob/master/reinforce/reinforce.py
 class SimplePolicy(nn.Module):
     '''
         approximate policy using a simple Neural Network
