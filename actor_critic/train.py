@@ -33,113 +33,57 @@ if __name__ == '__main__':
 
   
   # Define architecture parameters
+  render = False
+  gamma = 0.99
+  lr = 0.02
+  betas = (0.9, 0.999)
+  random_seed = 543
   hidden_units = 32
-  print_every = 100
-  save_fig = False
   num_steps = int(1e6)
   state_size = env.observation_space
   hidden_units = hidden_units
   num_actions = env.action_space
 
   # Initialize AC model
-  AC_net = ActorCritic(env.observation_space, hidden_units, env.action_space)
-  # Define optimizer
-  optimizer = optim.Adam(AC_net.parameters(), lr=1e-3)
+  policy = ActorCritic(state_size, hidden_units, num_actions)
 
-  episodes_passed = 0
-  acc_rewards = []
-  last_t = 0
+  # Define optimizer
+  optimizer = optim.Adam(policy.parameters(), lr=lr, betas=betas)
+
   state = env.reset()
 
-  # Initialize episodic reward list
-  episodic_rewards = []
-  avg_episodic_rewards = []
-  stdev_episodic_rewards = []
-  acc_episodic_reward = 0.0
-  best_avg_episodic_reward = -np.inf
   number_episodes = 2000
   max_episode_length = 1000
-  scores_deque = deque(maxlen=100)
   scores = []
+  score = 0
 
   for episode in range(1,number_episodes+1):
         state = env.reset()
-        rewards = []
-        log_probs = []
 
         for step in range(max_episode_length):
             state = torch.from_numpy(state).float().to(device)
-            # distribution over possible actions for state
-            policy = AC_net.forward
-            action_distribution, state_value = policy(state)
-            # sample action fron distribution
-            action = action_distribution.sample()
-            # compute log probability
-            log_prob = action_distribution.log_prob(action).unsqueeze(0)
+            # sample action from distribution
+            action = policy(state)
             # take a step in the env
-            state, reward, done, _ = env.step(action.item())
-            rewards.append(reward)
-            log_probs.append(log_prob)
+            state, reward, done, _ = env.step(action)
+            policy.rewards.append(reward)
+            score += reward
 
             if done:
                 break
 
-        total_rewards = sum(rewards)
-        scores.append(total_rewards)
-        scores_deque.append(total_rewards)
-	#   for t in range(num_steps):
-	#     if len(avg_episodic_rewards) > 0:   # so that avg_episodic_rewards won't be empty
-	#         # Stop if max episodes or playing good (above avg. reward of 5 over last 10 episodes)
-	#         # if episodes_passed == 5000 or avg_episodic_rewards[-1] > 5:
-	#         if episodes_passed == 20000:
-	#             break
+        # Updating the policy :
+        optimizer.zero_grad()
+        loss = policy.calculateLoss(gamma)
+        loss.backward()
+        optimizer.step()        
+        policy.reset()
+        scores.append( sum(policy.rewards))
 
-	#     state = torch.from_numpy(state).float().to(device)
-	#     # distribution over possible actions for state
-	#     policy = AC_net.forward
-	#     action_distribution, state_value = policy(state)
-	#     # sample action fron distribution
-	#     action = action_distribution.sample()
-	#     # compute log probability
-	#     log_prob = action_distribution.log_prob(action).unsqueeze(0)
-
-	#     state, reward, done, _ = env.step(action.item())   # Get transition
-	#     AC_net.rewards.append(reward)               # Document reward
-	#     acc_episodic_reward = acc_episodic_reward + reward  # Document accumulated episodic reward
-
-	#     # Episode ends - reset environment and document statistics
-	#     if reward == 20:
-	#     # if done:
-	#         episodes_passed += 1
-	#         episodic_rewards.append(acc_episodic_reward)
-	#         acc_episodic_reward = 0.0
-
-	#         # Compute average reward and variance (standard deviation)
-	#         if len(episodic_rewards) <= 10:
-	#             avg_episodic_rewards.append(np.mean(np.array(episodic_rewards)))
-	#             if len(episodic_rewards) >= 2:
-	#                 stdev_episodic_rewards.append(np.std(np.array(episodic_rewards)))
-
-	#         else:
-	#             avg_episodic_rewards.append(np.mean(np.array(episodic_rewards[-10:])))
-	#             stdev_episodic_rewards.append(np.std(np.array(episodic_rewards[-10:])))
-
-	#         # Check if average acc. reward has improved
-	#         if avg_episodic_rewards[-1] > best_avg_episodic_reward:
-	#             best_avg_episodic_reward = avg_episodic_rewards[-1]
-	#             # if save_model:
-	#             #     torch.save(AC_net, 'trained_AC_model')
-
-	#         # Update plot of acc. rewards every 20 episodes and print
-	#         # training details
-	#         if episodes_passed % print_every == 0:
-	#             plot_rewards(np.array(episodic_rewards), np.array(avg_episodic_rewards),
-	#                          np.array(stdev_episodic_rewards), save_fig)
-	#             print('Episode {}\tLast episode length: {:5d}\tAvg. Reward: {:.2f}\t'.format(
-	#                 episodes_passed, t - last_t, avg_episodic_rewards[-1]))
-	#             print('Best avg. episodic reward:', best_avg_episodic_reward)
-
-	#         last_t = t  # Follow episodes length
-	#         state = env.reset()
-	#         AC_net.update_weights(optimizer)    # Perform network weights update
-	#         continue
+        if score > 4000:
+            break
+        
+        if episode % 50 == 0:
+            score = score/50
+            print('Episode {}\tlength: {}\t Average reward: {}'.format(episode, step, score))
+            score = 0
