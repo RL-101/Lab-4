@@ -35,11 +35,8 @@ class ActorCritic(nn.Module):
         self.saved_actions = []
         self.rewards = []
 
-        # print(type(self.num_actions))
-
         # fully connected layers
         self.fc1 = nn.Linear(self.state_size, self.fc1_dims)
-        self.fc2 =  nn.Linear(self.fc1_dims, self.fc2_dims)
 
         # output layers
         self.actor = nn.Linear(self.fc2_dims, self.num_actions)
@@ -47,7 +44,6 @@ class ActorCritic(nn.Module):
     
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        # x = F.relu(self.fc2(x))
 
         state_values = self.critic(x)
 
